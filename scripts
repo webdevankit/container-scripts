@@ -1,0 +1,76 @@
+################### Pg badger script ######################
+docker run -itd \
+	--name pgbadger \
+	-v /usr/local/pgsql13data/log:/data/log \
+	-v /usr/local/pgsql13data/pgbadger/reports:/data/reports \
+	docker.io/dalibo/pgbadger:latest \
+	-j 4 \
+	--outdir=/data/reports \	
+	-f stderr /data/log/postgresql-2024-02-22_000000.log
+
+###################### Pgpool script ########################
+podman run -itd \
+	--name pgpool \
+	-p 9999:9999 \
+	-v /data/pgpool-II:/opt/pgpool-II \
+	-e POSTGRES_USERNAME=postgres \
+	-e POSTGRES_PASSWORD=postgresdrt#2018 \
+	-e PGPOOL_PARAMS_BACKEND_HOSTNAME0=10.194.75.139 \
+	-e PGPOOL_PARAMS_BACKEND_HOSTNAME1=10.194.75.138 \
+	-e PGPOOL_PARAMS_BACKEND_PORT0=5432 \
+	-e PGPOOL_PARAMS_BACKEND_PORT1=5432 \
+	-e PGPOOL_PARAMS_SR_CHECK_PERIOD=10 \
+	-e PGPOOL_PARAMS_SR_CHECK_USER=postgres \
+	-e PGPOOL_PARAMS_HEALTH_CHECK_PERIOD=10 \
+	-e PGPOOL_PARAMS_HEALTH_CHECK_USER=postgres \
+        -e PGPOOL_PARAMS_BACKEND_WEIGHT0=1 \
+        -e PGPOOL_PARAMS_BACKEND_WEIGHT1=4 \
+	-e PGPOOL_PARAMS_LOG_STATEMENT=on \
+        -e PGPOOL_PARAMS_LOG_PER_NODE_STATEMENT=on \
+	pgpool/pgpool
+
+###################### Redmine-postgres script ##########################
+#!/bin/bash
+
+# Create a pod for Redmine and PostgreSQL
+podman pod create --name red_mo --publish 5333:5432 --publish 3120:3000
+
+# Create a container for PostgreSQL
+podman run -d \
+  --pod red_mo \
+  --name postgres \
+  --restart always \
+  -e POSTGRES_PASSWORD='redhat' \
+  -e POSTGRES_DB='redmine' \
+  -e POSTGRES_USER='postgres' \
+  docker.io/bitnami/postgresql:latest
+
+# Create a container for Redmine
+podman run -d \
+  --pod red_mo \
+  --name redmine-app \
+  --restart always \
+  -e REDMINE_DATABASE_TYPE='postgresql' \
+  -e REDMINE_DB_DATABASE='redmine' \
+  -e REDMINE_DB_PASSWORD='redhat' \
+  redmine:latest
+
+######################## quay script #####################################
+podman run -itd \
+       	--name quay_config \
+	-p 8080:8080 \
+	quay.io/projectquay/quay config secret
+
+######################## Postgrs script used for quay ###################
+podman run -itd \
+	--name=postgresql \
+       	-e POSTGRES_USER=postgres \
+	-e POSTGRES_PASSWORD=redhat@123 \
+	-e TZ=Asia/Kolkata \
+	-e PGDATA=/var/lib/postgresql/data \
+	-e POSTGRES_DB=quay \
+	-v /home/work/quay-postgres/postgres/data:/var/lib/postgresql/data \
+	-p 5432:5432 \
+       	docker.io/library/postgres:latest
+
+
